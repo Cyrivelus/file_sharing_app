@@ -2,7 +2,6 @@ const express = require("express");
 const multer = require("multer");
 const cors = require("cors");
 const { v4: uuidv4 } = require("uuid");
-const fs = require("fs");
 const path = require("path");
 
 const app = express();
@@ -11,43 +10,31 @@ app.use(express.json());
 
 const ADMIN_SECRET = "Cameroun2024!";
 
-// Configuration du dossier d'upload (Adaptation pour Vercel)
-// En local: ./uploads | Sur Vercel: /tmp (seul endroit scriptable)
-const isVercel = process.env.VERCEL === "1";
-const uploadsDir = isVercel ? "/tmp" : path.join(__dirname, "uploads");
+// Utilisation de la mémoire pour Vercel (indispensable en serverless)
+const upload = multer({ storage: multer.memoryStorage() });
 
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, uploadsDir),
-  filename: (req, file, cb) =>
-    cb(null, uuidv4() + path.extname(file.originalname)),
-});
-const upload = multer({ storage });
-
-// "Base de données" en mémoire (Reset à chaque redémarrage sur Vercel)
+// Base de données temporaire en mémoire
 let dbFiles = [];
 let permissions = {};
 
-// --- Servir le fichier HTML sur la route "/" ---
+// Servir le fichier HTML sur la route racine
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "index.html"));
 });
 
+// Toutes les routes API commencent maintenant par /api
 // --- Upload ---
-app.post("/upload", upload.array("files"), (req, res) => {
+app.post("/api/upload", upload.array("files"), (req, res) => {
   const userId = req.headers["x-user-id"] || "anonymous";
   if (!req.files || req.files.length === 0)
     return res.status(400).send("Aucun fichier.");
 
   const newFiles = req.files.map((file) => {
-    const fileId = path.parse(file.filename).name;
     const fileData = {
-      id: fileId,
+      id: uuidv4(),
       name: file.originalname,
-      path: file.path,
+      buffer: file.buffer.toString("base64"), // Stockage en base64 dans la RAM
+      mimeType: file.mimetype,
       owner: userId,
       accessCode: Math.floor(1000 + Math.random() * 9000).toString(),
     };
@@ -55,11 +42,11 @@ app.post("/upload", upload.array("files"), (req, res) => {
     return fileData;
   });
 
-  res.json({ success: true, files: newFiles });
+  res.json({ success: true });
 });
 
 // --- Déverrouiller un fichier ---
-app.post("/unlock", (req, res) => {
+app.post("/api/unlock", (req, res) => {
   const { userId, code } = req.body;
   const file = dbFiles.find((f) => f.accessCode === code);
 
@@ -73,7 +60,7 @@ app.post("/unlock", (req, res) => {
 });
 
 // --- Liste des fichiers ---
-app.get("/files", (req, res) => {
+app.get("/api/files", (req, res) => {
   const userId = req.headers["x-user-id"];
   const adminToken = req.headers["x-admin-token"];
   const isAdmin = adminToken === ADMIN_SECRET;
@@ -83,41 +70,46 @@ app.get("/files", (req, res) => {
     ? dbFiles
     : dbFiles.filter((f) => f.owner === userId || userPerms.includes(f.id));
 
-  res.json({ files: filteredFiles, mode: isAdmin ? "admin" : "user" });
+  // On masque le buffer pour ne pas saturer le réseau lors du listing
+  const responseFiles = filteredFiles.map((f) => ({
+    id: f.id,
+    name: f.name,
+    owner: f.owner,
+    accessCode: f.accessCode,
+  }));
+
+  res.json({ files: responseFiles, mode: isAdmin ? "admin" : "user" });
 });
 
 // --- Téléchargement ---
-app.get("/download/:id", (req, res) => {
+app.get("/api/download/:id", (req, res) => {
   const file = dbFiles.find((f) => f.id === req.params.id);
   if (!file) return res.status(404).send("Fichier introuvable");
 
-  if (fs.existsSync(file.path)) {
-    res.download(file.path, file.name);
-  } else {
-    res.status(404).send("Fichier physiquement introuvable sur le serveur");
-  }
+  const fileBuffer = Buffer.from(file.buffer, "base64");
+  res.setHeader("Content-Type", file.mimeType);
+  res.setHeader("Content-Disposition", `attachment; filename="${file.name}"`);
+  res.send(fileBuffer);
 });
 
 // --- Suppression ---
-app.delete("/delete/:id", (req, res) => {
+app.delete("/api/delete/:id", (req, res) => {
   const index = dbFiles.findIndex((f) => f.id === req.params.id);
   if (index !== -1) {
-    if (fs.existsSync(dbFiles[index].path)) {
-      fs.unlinkSync(dbFiles[index].path);
-    }
     dbFiles.splice(index, 1);
     return res.json({ success: true });
   }
   res.status(404).json({ error: "Fichier non trouvé" });
 });
 
-// --- Démarrage (Local uniquement) ---
+// Export pour Vercel
+module.exports = app;
+
+// Démarrage local
+const isVercel = process.env.VERCEL === "1";
 if (!isVercel) {
   const PORT = process.env.PORT || 3000;
   app.listen(PORT, () =>
     console.log(`Serveur démarré : http://localhost:${PORT}`),
   );
 }
-
-// Export pour Vercel
-module.exports = app;

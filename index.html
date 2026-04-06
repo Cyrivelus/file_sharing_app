@@ -114,6 +114,10 @@
         padding: 2px 5px;
         border-radius: 4px;
       }
+      /* Style pour les fichiers reçus */
+      .file-received {
+        border-left: 5px solid var(--success);
+      }
     </style>
   </head>
   <body>
@@ -156,13 +160,17 @@
     </div>
 
     <script>
-      // AUTO-DÉTECTION DE L'URL : Plus besoin de localhost !
+      // AUTO-DÉTECTION DE L'URL
       const API_URL = window.location.origin + "/api";
-      let currentUser =
-        localStorage.getItem("userId") ||
-        "user_" + Math.floor(Math.random() * 9999);
+
+      // On s'assure d'avoir un identifiant unique stocké en local
+      let currentUser = localStorage.getItem("userId");
+      if (!currentUser) {
+        currentUser = "user_" + Math.floor(1000 + Math.random() * 9000);
+        localStorage.setItem("userId", currentUser);
+      }
+
       let adminToken = localStorage.getItem("adminToken") || "";
-      localStorage.setItem("userId", currentUser);
 
       function updateText() {
         const count = document.getElementById("fileInput").files.length;
@@ -170,6 +178,7 @@
           count + " fichier(s) prêt(s)";
       }
 
+      // Raccourci pour le mode Admin (Alt + A)
       document.addEventListener("keydown", (e) => {
         if (e.altKey && e.key === "a") {
           const pass = prompt("Code Admin :");
@@ -194,7 +203,9 @@
             body: formData,
             headers: { "x-user-id": currentUser },
           });
-          const data = await res.json();
+
+          if (!res.ok) throw new Error("Erreur serveur");
+
           alert(
             "Envoyé ! Partagez le code affiché en rouge avec votre destinataire.",
           );
@@ -207,29 +218,42 @@
       }
 
       async function unlockFile() {
-        const code = document.getElementById("unlockCode").value;
-        if (!code) return;
+        const codeInput = document.getElementById("unlockCode");
+        const code = codeInput.value.trim();
+        if (!code) return alert("Veuillez entrer un code");
 
-        const res = await fetch(`${API_URL}/unlock`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId: currentUser, code: code }),
-        });
+        try {
+          const res = await fetch(`${API_URL}/unlock`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId: currentUser, code: code }),
+          });
 
-        const data = await res.json();
-        if (data.success) {
-          alert("Fichier débloqué : " + data.fileName);
-          document.getElementById("unlockCode").value = "";
-          loadFiles();
-        } else {
-          alert("Code invalide");
+          const data = await res.json();
+
+          if (res.status === 200 && data.success) {
+            alert("Succès ! Fichier débloqué : " + data.fileName);
+            codeInput.value = "";
+
+            // Attente de 500ms pour laisser le temps à Supabase d'indexer la permission
+            setTimeout(() => {
+              loadFiles();
+            }, 500);
+          } else {
+            alert(data.error || "Code invalide");
+          }
+        } catch (error) {
+          alert("Erreur lors de la communication avec le serveur.");
         }
       }
 
       async function loadFiles() {
         try {
           const r = await fetch(`${API_URL}/files`, {
-            headers: { "x-user-id": currentUser, "x-admin-token": adminToken },
+            headers: {
+              "x-user-id": currentUser,
+              "x-admin-token": adminToken,
+            },
           });
           const data = await r.json();
 
@@ -239,14 +263,25 @@
           const list = document.getElementById("fileList");
           list.innerHTML = "<h3>Mes Fichiers & Reçus</h3>";
 
+          if (!data.files || data.files.length === 0) {
+            const emptyDiv = document.createElement("div");
+            emptyDiv.style.textAlign = "center";
+            emptyDiv.style.color = "#aaa";
+            emptyDiv.style.padding = "20px";
+            emptyDiv.innerText = "Aucun fichier disponible.";
+            list.appendChild(emptyDiv);
+            return;
+          }
+
           data.files.forEach((f) => {
             const isMine = f.owner === currentUser;
             const div = document.createElement("div");
-            div.className = "file-item";
+            // Ajout d'une classe spécifique si c'est un fichier reçu
+            div.className = isMine ? "file-item" : "file-item file-received";
             div.innerHTML = `
                     <div style="font-size:13px">
                         <strong>${f.name}</strong><br>
-                        ${isMine ? `<span class="code-display">CODE: ${f.accessCode}</span>` : `<small>Reçu</small>`}
+                        ${isMine ? `<span class="code-display">CODE: ${f.accessCode}</span>` : `<small style="color:var(--secondary)">🔓 Reçu</small>`}
                     </div>
                     <div>
                         <a href="${API_URL}/download/${f.id}" style="text-decoration:none">⬇️</a>
@@ -261,15 +296,23 @@
       }
 
       async function deleteFile(id) {
-        if (confirm("Supprimer ?")) {
-          await fetch(`${API_URL}/delete/${id}`, {
-            method: "DELETE",
-            headers: { "x-user-id": currentUser, "x-admin-token": adminToken },
-          });
-          loadFiles();
+        if (confirm("Supprimer ce fichier ?")) {
+          try {
+            await fetch(`${API_URL}/delete/${id}`, {
+              method: "DELETE",
+              headers: {
+                "x-user-id": currentUser,
+                "x-admin-token": adminToken,
+              },
+            });
+            loadFiles();
+          } catch (error) {
+            alert("Erreur lors de la suppression.");
+          }
         }
       }
 
+      // Premier chargement au lancement de la page
       loadFiles();
     </script>
   </body>

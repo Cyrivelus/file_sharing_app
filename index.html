@@ -1,157 +1,276 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PartageFile - Sécurisé</title>
     <style>
-        :root { --primary: #075e54; --secondary: #128c7e; --success: #25d366; --danger: #e53935; }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Segoe UI', sans-serif; background: #e5ddd5; padding: 10px; }
-        .container { max-width: 600px; margin: 20px auto; background: white; padding: 25px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        
-        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--primary); padding-bottom: 10px; margin-bottom: 20px; }
-        #statusBadge { font-size: 11px; padding: 4px 10px; border-radius: 20px; background: #eee; font-weight: bold; }
-
-        .section { background: #f9f9f9; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #ddd; }
-        h3 { font-size: 14px; margin-bottom: 10px; color: var(--primary); }
-
-        .unlock-box { display: flex; gap: 5px; }
-        .unlock-box input { flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 5px; text-align: center; font-weight: bold; letter-spacing: 2px; }
-
-        .upload-area { border: 2px dashed #ccc; padding: 20px; text-align: center; border-radius: 10px; cursor: pointer; background: white; }
-        
-        .btn { border: none; padding: 12px; border-radius: 5px; cursor: pointer; font-weight: bold; transition: 0.2s; }
-        .btn-send { background: var(--primary); color: white; width: 100%; margin-top: 10px; }
-        .btn-unlock { background: var(--secondary); color: white; padding: 0 20px; }
-
-        .file-item { display: flex; justify-content: space-between; align-items: center; padding: 12px; border-radius: 8px; background: white; margin-bottom: 8px; border: 1px solid #eee; border-left: 5px solid var(--primary); }
-        .code-display { color: var(--danger); font-weight: bold; background: #fff5f5; padding: 2px 5px; border-radius: 4px; }
+      :root {
+        --primary: #075e54;
+        --secondary: #128c7e;
+        --success: #25d366;
+        --danger: #e53935;
+      }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        font-family: "Segoe UI", sans-serif;
+        background: #e5ddd5;
+        padding: 10px;
+      }
+      .container {
+        max-width: 600px;
+        margin: 20px auto;
+        background: white;
+        padding: 25px;
+        border-radius: 10px;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+      }
+      .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 2px solid var(--primary);
+        padding-bottom: 10px;
+        margin-bottom: 20px;
+      }
+      #statusBadge {
+        font-size: 11px;
+        padding: 4px 10px;
+        border-radius: 20px;
+        background: #eee;
+        font-weight: bold;
+      }
+      .section {
+        background: #f9f9f9;
+        padding: 15px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        border: 1px solid #ddd;
+      }
+      h3 {
+        font-size: 14px;
+        margin-bottom: 10px;
+        color: var(--primary);
+      }
+      .unlock-box {
+        display: flex;
+        gap: 5px;
+      }
+      .unlock-box input {
+        flex: 1;
+        padding: 10px;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+        text-align: center;
+        font-weight: bold;
+        letter-spacing: 2px;
+      }
+      .upload-area {
+        border: 2px dashed #ccc;
+        padding: 20px;
+        text-align: center;
+        border-radius: 10px;
+        cursor: pointer;
+        background: white;
+      }
+      .btn {
+        border: none;
+        padding: 12px;
+        border-radius: 5px;
+        cursor: pointer;
+        font-weight: bold;
+        transition: 0.2s;
+      }
+      .btn-send {
+        background: var(--primary);
+        color: white;
+        width: 100%;
+        margin-top: 10px;
+      }
+      .btn-unlock {
+        background: var(--secondary);
+        color: white;
+        padding: 0 20px;
+      }
+      .file-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px;
+        border-radius: 8px;
+        background: white;
+        margin-bottom: 8px;
+        border: 1px solid #eee;
+        border-left: 5px solid var(--primary);
+      }
+      .code-display {
+        color: var(--danger);
+        font-weight: bold;
+        background: #fff5f5;
+        padding: 2px 5px;
+        border-radius: 4px;
+      }
     </style>
-</head>
-<body>
-
-<div class="container">
-    <div class="header">
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
         <h2>📁 PartageFile</h2>
         <span id="statusBadge">Chargement...</span>
-    </div>
+      </div>
 
-    <div class="section">
+      <div class="section">
         <h3>🔑 Recevoir un fichier</h3>
         <div class="unlock-box">
-            <input type="text" id="unlockCode" placeholder="Code à 4 chiffres">
-            <button class="btn btn-unlock" onclick="unlockFile()">OK</button>
+          <input type="text" id="unlockCode" placeholder="Code à 4 chiffres" />
+          <button class="btn btn-unlock" onclick="unlockFile()">OK</button>
         </div>
-    </div>
+      </div>
 
-    <div class="section">
+      <div class="section">
         <h3>📤 Envoyer des fichiers</h3>
-        <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()">
-            <p id="uploadText">Cliquez pour choisir</p>
-            <input type="file" id="fileInput" multiple hidden onchange="updateText()">
+        <div
+          class="upload-area"
+          id="uploadArea"
+          onclick="document.getElementById('fileInput').click()"
+        >
+          <p id="uploadText">Cliquez pour choisir</p>
+          <input
+            type="file"
+            id="fileInput"
+            multiple
+            hidden
+            onchange="updateText()"
+          />
         </div>
-        <button class="btn btn-send" onclick="uploadFile()">ENVOYER MAINTENANT</button>
+        <button class="btn btn-send" onclick="uploadFile()">
+          ENVOYER MAINTENANT
+        </button>
+      </div>
+
+      <div id="fileList"></div>
     </div>
-    
-    <div id="fileList"></div>
-</div>
 
-<script>
-    const API_URL = 'http://localhost:3000';
-    let currentUser = localStorage.getItem('userId') || 'user_' + Math.floor(Math.random() * 9999);
-    let adminToken = localStorage.getItem('adminToken') || ""; 
-    localStorage.setItem('userId', currentUser);
+    <script>
+      // AUTO-DÉTECTION DE L'URL : Plus besoin de localhost !
+      const API_URL = window.location.origin + "/api";
+      let currentUser =
+        localStorage.getItem("userId") ||
+        "user_" + Math.floor(Math.random() * 9999);
+      let adminToken = localStorage.getItem("adminToken") || "";
+      localStorage.setItem("userId", currentUser);
 
-    function updateText() {
-        const count = document.getElementById('fileInput').files.length;
-        document.getElementById('uploadText').innerText = count + " fichier(s) prêt(s)";
-    }
+      function updateText() {
+        const count = document.getElementById("fileInput").files.length;
+        document.getElementById("uploadText").innerText =
+          count + " fichier(s) prêt(s)";
+      }
 
-    // Raccourci secret Admin: Alt + A
-    document.addEventListener('keydown', (e) => {
-        if (e.altKey && e.key === 'a') {
-            const pass = prompt("Code Admin :");
-            if(pass) { adminToken = pass; localStorage.setItem('adminToken', pass); loadFiles(); }
+      document.addEventListener("keydown", (e) => {
+        if (e.altKey && e.key === "a") {
+          const pass = prompt("Code Admin :");
+          if (pass) {
+            adminToken = pass;
+            localStorage.setItem("adminToken", pass);
+            loadFiles();
+          }
         }
-    });
+      });
 
-    async function uploadFile() {
-        const fileInput = document.getElementById('fileInput');
+      async function uploadFile() {
+        const fileInput = document.getElementById("fileInput");
         if (!fileInput.files.length) return alert("Sélectionnez un fichier");
-        
-        const formData = new FormData();
-        for (let file of fileInput.files) formData.append('files', file);
-        
-        const res = await fetch(`${API_URL}/upload`, { 
-            method: 'POST', 
-            body: formData,
-            headers: { 'x-user-id': currentUser }
-        });
-        const data = await res.json();
-        alert("Envoyé ! Partagez le code affiché en rouge avec votre destinataire.");
-        fileInput.value = '';
-        updateText();
-        loadFiles();
-    }
 
-    async function unlockFile() {
-        const code = document.getElementById('unlockCode').value;
-        if(!code) return;
+        const formData = new FormData();
+        for (let file of fileInput.files) formData.append("files", file);
+
+        try {
+          const res = await fetch(`${API_URL}/upload`, {
+            method: "POST",
+            body: formData,
+            headers: { "x-user-id": currentUser },
+          });
+          const data = await res.json();
+          alert(
+            "Envoyé ! Partagez le code affiché en rouge avec votre destinataire.",
+          );
+          fileInput.value = "";
+          updateText();
+          loadFiles();
+        } catch (err) {
+          alert("Erreur lors de l'envoi.");
+        }
+      }
+
+      async function unlockFile() {
+        const code = document.getElementById("unlockCode").value;
+        if (!code) return;
 
         const res = await fetch(`${API_URL}/unlock`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: currentUser, code: code })
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: currentUser, code: code }),
         });
-        
+
         const data = await res.json();
-        if(data.success) {
-            alert("Fichier débloqué : " + data.fileName);
-            document.getElementById('unlockCode').value = '';
-            loadFiles();
+        if (data.success) {
+          alert("Fichier débloqué : " + data.fileName);
+          document.getElementById("unlockCode").value = "";
+          loadFiles();
         } else {
-            alert("Code invalide");
+          alert("Code invalide");
         }
-    }
+      }
 
-    async function loadFiles() {
-        const r = await fetch(`${API_URL}/files`, {
-            headers: { 'x-user-id': currentUser, 'x-admin-token': adminToken }
-        });
-        const data = await r.json();
-        
-        document.getElementById('statusBadge').innerText = data.mode === 'admin' ? "MODE ADMIN" : "ID: " + currentUser;
-        
-        const list = document.getElementById('fileList');
-        list.innerHTML = '<h3>Mes Fichiers & Reçus</h3>';
-        
-        data.files.forEach(f => {
+      async function loadFiles() {
+        try {
+          const r = await fetch(`${API_URL}/files`, {
+            headers: { "x-user-id": currentUser, "x-admin-token": adminToken },
+          });
+          const data = await r.json();
+
+          document.getElementById("statusBadge").innerText =
+            data.mode === "admin" ? "MODE ADMIN" : "ID: " + currentUser;
+
+          const list = document.getElementById("fileList");
+          list.innerHTML = "<h3>Mes Fichiers & Reçus</h3>";
+
+          data.files.forEach((f) => {
             const isMine = f.owner === currentUser;
-            const div = document.createElement('div');
-            div.className = 'file-item';
+            const div = document.createElement("div");
+            div.className = "file-item";
             div.innerHTML = `
-                <div style="font-size:13px">
-                    <strong>${f.name}</strong><br>
-                    ${isMine ? `<span class="code-display">CODE: ${f.accessCode}</span>` : `<small>Reçu</small>`}
-                </div>
-                <div>
-                    <a href="${API_URL}/download/${f.id}" style="text-decoration:none">⬇️</a>
-                    <button onclick="deleteFile('${f.id}')" style="border:none; background:none; cursor:pointer; margin-left:10px">🗑️</button>
-                </div>
-            `;
+                    <div style="font-size:13px">
+                        <strong>${f.name}</strong><br>
+                        ${isMine ? `<span class="code-display">CODE: ${f.accessCode}</span>` : `<small>Reçu</small>`}
+                    </div>
+                    <div>
+                        <a href="${API_URL}/download/${f.id}" style="text-decoration:none">⬇️</a>
+                        <button onclick="deleteFile('${f.id}')" style="border:none; background:none; cursor:pointer; margin-left:10px">🗑️</button>
+                    </div>
+                `;
             list.appendChild(div);
-        });
-    }
-
-    async function deleteFile(id) {
-        if(confirm("Supprimer ?")) {
-            await fetch(`${API_URL}/delete/${id}`, { method: 'DELETE' });
-            loadFiles();
+          });
+        } catch (err) {
+          document.getElementById("statusBadge").innerText = "Erreur Serveur";
         }
-    }
+      }
 
-    loadFiles();
-</script>
-</body>
+      async function deleteFile(id) {
+        if (confirm("Supprimer ?")) {
+          await fetch(`${API_URL}/delete/${id}`, {
+            method: "DELETE",
+            headers: { "x-user-id": currentUser, "x-admin-token": adminToken },
+          });
+          loadFiles();
+        }
+      }
+
+      loadFiles();
+    </script>
+  </body>
 </html>

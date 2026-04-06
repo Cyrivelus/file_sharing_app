@@ -3,109 +3,129 @@ const multer = require("multer");
 const cors = require("cors");
 const { v4: uuidv4 } = require("uuid");
 const path = require("path");
+const { createClient } = require("@supabase/supabase-js");
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-const ADMIN_SECRET = "Cameroun2024!";
+// Lecture sécurisée du mot de passe admin
+const ADMIN_SECRET = process.env.ADMIN_SECRET || "CodeParDefautPourLeLocal123!";
 
-// Utilisation de la mémoire pour Vercel (indispensable en serverless)
+// Connexion Pro à Supabase via variables d'environnement
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_KEY;
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// Utilisation de la mémoire pour l'upload temporaire
 const upload = multer({ storage: multer.memoryStorage() });
-
-// Base de données temporaire en mémoire
-let dbFiles = [];
-let permissions = {};
 
 // Servir le fichier HTML sur la route racine
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "index.html"));
 });
 
-// Toutes les routes API commencent maintenant par /api
-// --- Upload ---
-app.post("/api/upload", upload.array("files"), (req, res) => {
+// --- 1. Upload ---
+app.post("/api/upload", upload.array("files"), async (req, res) => {
   const userId = req.headers["x-user-id"] || "anonymous";
   if (!req.files || req.files.length === 0)
     return res.status(400).send("Aucun fichier.");
 
-  const newFiles = req.files.map((file) => {
-    const fileData = {
-      id: uuidv4(),
-      name: file.originalname,
-      buffer: file.buffer.toString("base64"), // Stockage en base64 dans la RAM
-      mimeType: file.mimetype,
-      owner: userId,
-      accessCode: Math.floor(1000 + Math.random() * 9000).toString(),
-    };
-    dbFiles.push(fileData);
-    return fileData;
-  });
+  try {
+    for (const file of req.files) {
+      const fileId = uuidv4();
+      const fileExt = path.extname(file.originalname);
+      const fileNameInBucket = `${fileId}${fileExt}`;
 
-  res.json({ success: true });
-});
+      // A. Envoyer le fichier physique dans le Storage Supabase
+      const { error: uploadError } = await supabase.storage
+        .from("fichiers")
+        .upload(fileNameInBucket, file.buffer, {
+          contentType: file.mimetype,
+        });
 
-// --- Déverrouiller un fichier ---
-app.post("/api/unlock", (req, res) => {
-  const { userId, code } = req.body;
-  const file = dbFiles.find((f) => f.accessCode === code);
+      if (uploadError) throw uploadError;
 
-  if (!file) return res.status(404).json({ error: "Code incorrect" });
+      const accessCode = Math.floor(1000 + Math.random() * 9000).toString();
 
-  if (!permissions[userId]) permissions[userId] = [];
-  if (!permissions[userId].includes(file.id)) {
-    permissions[userId].push(file.id);
+      // B. Sauvegarder les métadonnées dans la DB Supabase
+      const { error: dbError } = await supabase.from("files_meta").insert([
+        {
+          id: fileId,
+          name: file.originalname,
+          bucket_path: fileNameInBucket,
+          mime_type: file.mimetype,
+          owner: userId,
+          access_code: accessCode,
+        },
+      ]);
+
+      if (dbError) throw dbError;
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Erreur lors de l'upload vers Supabase" });
   }
-  res.json({ success: true, fileName: file.name });
 });
 
-// --- Liste des fichiers ---
-app.get("/api/files", (req, res) => {
+// --- 2. Liste des fichiers ---
+app.get("/api/files", async (req, res) => {
   const userId = req.headers["x-user-id"];
-  const adminToken = req.headers["x-admin-token"];
-  const isAdmin = adminToken === ADMIN_SECRET;
-  const userPerms = permissions[userId] || [];
 
-  const filteredFiles = isAdmin
-    ? dbFiles
-    : dbFiles.filter((f) => f.owner === userId || userPerms.includes(f.id));
+  try {
+    const { data: allFiles, error } = await supabase
+      .from("files_meta")
+      .select("*");
 
-  // On masque le buffer pour ne pas saturer le réseau lors du listing
-  const responseFiles = filteredFiles.map((f) => ({
-    id: f.id,
-    name: f.name,
-    owner: f.owner,
-    accessCode: f.accessCode,
-  }));
+    if (error) throw error;
 
-  res.json({ files: responseFiles, mode: isAdmin ? "admin" : "user" });
-});
+    const filteredFiles = allFiles.filter((f) => f.owner === userId);
 
-// --- Téléchargement ---
-app.get("/api/download/:id", (req, res) => {
-  const file = dbFiles.find((f) => f.id === req.params.id);
-  if (!file) return res.status(404).send("Fichier introuvable");
+    const responseFiles = filteredFiles.map((f) => ({
+      id: f.id,
+      name: f.name,
+      owner: f.owner,
+      accessCode: f.access_code,
+    }));
 
-  const fileBuffer = Buffer.from(file.buffer, "base64");
-  res.setHeader("Content-Type", file.mimeType);
-  res.setHeader("Content-Disposition", `attachment; filename="${file.name}"`);
-  res.send(fileBuffer);
-});
-
-// --- Suppression ---
-app.delete("/api/delete/:id", (req, res) => {
-  const index = dbFiles.findIndex((f) => f.id === req.params.id);
-  if (index !== -1) {
-    dbFiles.splice(index, 1);
-    return res.json({ success: true });
+    res.json({ files: responseFiles, mode: "user" });
+  } catch (error) {
+    res.status(500).json({ error: "Impossible de charger les fichiers" });
   }
-  res.status(404).json({ error: "Fichier non trouvé" });
+});
+
+// --- 3. Téléchargement ---
+app.get("/api/download/:id", async (req, res) => {
+  try {
+    const { data: file, error } = await supabase
+      .from("files_meta")
+      .select("*")
+      .eq("id", req.params.id)
+      .single();
+
+    if (error || !file) return res.status(404).send("Fichier introuvable");
+
+    const { data, error: downloadError } = await supabase.storage
+      .from("fichiers")
+      .download(file.bucket_path);
+
+    if (downloadError) throw downloadError;
+
+    const buffer = Buffer.from(await data.arrayBuffer());
+
+    res.setHeader("Content-Type", file.mime_type);
+    res.setHeader("Content-Disposition", `attachment; filename="${file.name}"`);
+    res.send(buffer);
+  } catch (error) {
+    res.status(500).send("Erreur lors du téléchargement");
+  }
 });
 
 // Export pour Vercel
 module.exports = app;
 
-// Démarrage local
 const isVercel = process.env.VERCEL === "1";
 if (!isVercel) {
   const PORT = process.env.PORT || 3000;

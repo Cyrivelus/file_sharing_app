@@ -25,6 +25,9 @@ app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "index.html"));
 });
 
+// 🔥 SOLUTION ERREUR 404 FAVICON : Répond proprement au navigateur
+app.get("/favicon.ico", (req, res) => res.status(204).end());
+
 // --- 1. Upload ---
 app.post("/api/upload", upload.array("files"), async (req, res) => {
   const userId = req.headers["x-user-id"] || "anonymous";
@@ -75,26 +78,27 @@ app.post("/api/unlock", async (req, res) => {
   const { userId, code } = req.body;
 
   try {
-    // Trouver le fichier qui correspond au code
+    // A. Trouver le fichier qui correspond au code
     const { data: file, error } = await supabase
       .from("files_meta")
-      .select("*")
+      .select("id, name")
       .eq("access_code", code)
       .single();
 
-    if (error || !file)
+    if (error || !file) {
       return res.status(404).json({ error: "Code incorrect" });
+    }
 
-    // Enregistrer la permission dans Supabase
-    // On utilise à nouveau files_meta pour l'instant pour éviter de te faire créer une table,
-    // mais on s'assure d'identifier le fait que ce user y a accès maintenant.
-    // L'idéal est la table 'permissions', mais pour que ça marche tout de suite sans config SQL :
+    // B. Enregistrer la permission d'accès pour cet utilisateur
+    const { error: permError } = await supabase
+      .from("permissions")
+      .insert([{ user_id: userId, file_id: file.id }]);
 
-    // On met simplement à jour l'array ou la donnée pour dire que cet utilisateur y a accès.
-    // (Pour faire simple et immédiat sans casser ta BDD, on va utiliser la mémoire Vercel pour le déblocage rapide de session)
+    if (permError) throw permError;
 
     res.json({ success: true, fileName: file.name });
   } catch (error) {
+    console.error(error);
     res.status(500).json({ error: "Erreur lors du déverrouillage" });
   }
 });
@@ -104,14 +108,27 @@ app.get("/api/files", async (req, res) => {
   const userId = req.headers["x-user-id"];
 
   try {
+    // A. Récupérer tous les fichiers du système
     const { data: allFiles, error } = await supabase
       .from("files_meta")
       .select("*");
 
     if (error) throw error;
 
-    // Filtre : On affiche les fichiers créés par le user OU ceux dont il a le code.
-    const filteredFiles = allFiles.filter((f) => f.owner === userId);
+    // B. Récupérer les IDs des fichiers débloqués par ce user
+    const { data: myPerms } = await supabase
+      .from("permissions")
+      .select("file_id")
+      .eq("user_id", userId);
+
+    const unlockedFileIds = myPerms ? myPerms.map((p) => p.file_id) : [];
+
+    // C. Filtrer : On montre les fichiers possédés OU débloqués
+    const filteredFiles = allFiles.filter((f) => {
+      const isOwner = f.owner === userId;
+      const isUnlocked = unlockedFileIds.includes(f.id);
+      return isOwner || isUnlocked;
+    });
 
     const responseFiles = filteredFiles.map((f) => ({
       id: f.id,
@@ -122,6 +139,7 @@ app.get("/api/files", async (req, res) => {
 
     res.json({ files: responseFiles, mode: "user" });
   } catch (error) {
+    console.error(error);
     res.status(500).json({ error: "Impossible de charger les fichiers" });
   }
 });
